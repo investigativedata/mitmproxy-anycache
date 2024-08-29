@@ -1,0 +1,3 @@
+# anystore==0.1.9
+anystore @ git+https://github.com/investigativedata/anystore.git@develop
+redis==5.0.8
