@@ -10,6 +10,6 @@ RUN apt clean
 
 COPY requirements.txt /home/mitmproxy/requirements_anystore.txt
 RUN pip install --no-cache-dir -r /home/mitmproxy/requirements_anystore.txt
-COPY anystore.py /home/mitmproxy/anystore.py
+COPY anycache.py /home/mitmproxy/anycache.py
 
-CMD ["mitmdump", "-s /home/mitmproxy/anystore.py"]
+CMD ["mitmdump", "-s /home/mitmproxy/anycache.py"]
