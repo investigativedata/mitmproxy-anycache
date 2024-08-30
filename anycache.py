@@ -133,7 +133,7 @@ class Cache:
         return f"{host}/{prefix}/{make_data_checksum(flow.request.url)}"
 
     def should_cache(self, flow: HTTPFlow) -> bool:
-        return flow.request.scheme in ("GET", "OPTIONS", "HEAD")
+        return flow.request.method.upper() in ("GET", "OPTIONS", "HEAD")
 
 
 addons = [Cache()]
