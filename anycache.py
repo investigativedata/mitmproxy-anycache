@@ -82,19 +82,22 @@ class Cache:
         """
         # Get cache key or create it from request headers
         key = self.get_cache_key_from_flow(flow)
-        flow.metadata[self.cache_key_name] = key
+        if key is not None:
+            flow.metadata[self.cache_key_name] = key
 
-        try:
-            res: HTTPFlow = self.store.get(key)
-            assert res.response is not None
-            log.info(f"Cache hit: {key}")
-            flow.response = res.response
-            flow.response.headers[self.cache_key_name] = key
-            flow.response.headers[self.cache_hit_key_name] = "HIT"
-            flow.metadata["cache-hit"] = True
-        except (DoesNotExist, AssertionError):
-            flow.request.headers.pop(self.cache_key_name, None)
-            flow.metadata["cache-hit"] = False
+            try:
+                res: HTTPFlow = self.store.get(key)
+                assert res.response is not None
+                log.info(f"Cache hit: {key}")
+                flow.response = res.response
+                flow.response.headers[self.cache_key_name] = key
+                flow.response.headers[self.cache_hit_key_name] = "HIT"
+                flow.metadata["cache-hit"] = True
+                return
+            except (DoesNotExist, AssertionError):
+                pass
+        flow.request.headers.pop(self.cache_key_name, None)
+        flow.metadata["cache-hit"] = False
 
     def response(self, flow: HTTPFlow) -> None:
         """response
@@ -105,10 +108,12 @@ class Cache:
 
         # Check if the response has a cache key
         key = self.get_cache_key_from_flow(flow)
-        if not flow.metadata.get("cache-hit", False):
+        if key and not flow.metadata.get("cache-hit", False):
             self.store.put(key, flow)
 
-    def get_cache_key_from_flow(self, flow: HTTPFlow) -> str:
+    def get_cache_key_from_flow(self, flow: HTTPFlow) -> str | None:
+        if not self.should_cache(flow):
+            return
         # 1. Try from flow metadata
         cache_key = flow.metadata.get(self.cache_key_name)
         if cache_key:
@@ -126,6 +131,9 @@ class Cache:
         host = urlparse(flow.request.url).netloc
         prefix = f"{flow.request.scheme}#{flow.request.method}"
         return f"{host}/{prefix}/{make_data_checksum(flow.request.url)}"
+
+    def should_cache(self, flow: HTTPFlow) -> bool:
+        return flow.request.scheme in ("GET", "OPTIONS", "HEAD")
 
 
 addons = [Cache()]
