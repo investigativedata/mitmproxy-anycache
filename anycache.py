@@ -16,6 +16,8 @@ from urllib.parse import urlparse
 from anystore.exceptions import DoesNotExist
 from anystore.store import BaseStore, get_store
 from anystore.util import make_data_checksum
+from pantomime import normalize_mimetype
+from pantomime.types import DEFAULT, JSON
 from mitmproxy import ctx
 from mitmproxy.addonmanager import Loader
 from mitmproxy.http import HTTPFlow
@@ -50,6 +52,18 @@ class Cache:
     def cache_hit_key_name(self) -> str:
         return str(ctx.options.cache_hit_key_name).lower()  # http2
 
+    @cached_property
+    def cache_mimetypes(self) -> set[str]:
+        mimes = set()
+        for opt in str(ctx.options.cache_mimetypes).lower().split(","):
+            if opt in GROUPS:
+                mimes.update(GROUPS[opt])
+            else:
+                mtype = normalize_mimetype(opt)
+                if mtype != DEFAULT:
+                    mimes.add(mtype)
+        return mimes
+
     def load(self, loader: Loader) -> None:
         loader.add_option(
             name="cache_key_name",
@@ -63,10 +77,17 @@ class Cache:
             default="x-anycache",
             help="Header key used to determine if request was cached.",
         )
+        loader.add_option(
+            name="cache_mimetypes",
+            typespec=str,
+            default="web,images,assets,json",
+            help="Mimetypes or groups that should be cached",
+        )
         self.store = get_store(
             serialization_func=serialize, deserialization_func=deserialize
         )
         log.info(f"Cache: `{self.store.uri}`")
+        log.info(f"Cache mimetypes: `{','.join(self.cache_mimetypes)}`")
         log.info(f"Header key: `{self.cache_key_name}`")
         log.info(f"Header hit key: `{self.cache_hit_key_name}`")
 
@@ -103,13 +124,17 @@ class Cache:
         """response
 
         1. If the response was a cache hit, do nothing
-        2. If the response wasn't a cache hit, store it
+        2. If the response wasn't a cache hit, store it (if we get a key and
+           mimetype matches)
         """
 
         # Check if the response has a cache key
         key = self.get_cache_key_from_flow(flow)
         if key and not flow.metadata.get("cache-hit", False):
-            self.store.put(key, flow)
+            mtype = flow.response.headers.get("content-type", "")
+            mtype = normalize_mimetype(mtype.split(";")[0].lower())
+            if mtype in self.cache_mimetypes:
+                self.store.put(key, flow)
 
     def get_cache_key_from_flow(self, flow: HTTPFlow) -> str | None:
         if not self.should_cache(flow):
@@ -137,3 +162,82 @@ class Cache:
 
 
 addons = [Cache()]
+
+# MIME GROUPS
+# https://github.com/alephdata/memorious/blob/main/memorious/logic/mime.py
+WEB = [
+    "text/html",
+    "text/plain",
+    "text/xml",
+    "application/xml",
+]
+
+IMAGES = [
+    "image/jpeg",
+    "image/bmp",
+    "image/png",
+    "image/tiff",
+    "image/gif",
+    "application/postscript",
+    "image/vnd.dxf",
+    "image/svg+xml",
+    "image/x-pict",
+    "image/x-ms-bmp",
+]
+
+MEDIA = [
+    "audio/mpeg",
+    "video/x-flv",
+    "video/mp4",
+    "video/mp2t",
+    "video/3gpp",
+    "video/quicktime",
+    "video/x-msvideo",
+    "video/x-ms-wmv",
+]
+
+DOCUMENTS = [
+    "application/vnd.ms-excel",
+    "application/msword",
+    "application/pdf",
+    ".pdf",  # seen in the wild (TM)
+    "application/vnd.ms-powerpoint",
+    "text/richtext",
+    "application/vnd.oasis.opendocument.text",
+    "application/rtf",
+    "application/vnd.oasis.opendocument.spreadsheet",
+    "application/x-rtf",
+    "application/vnd.oasis.opendocument.graphics",
+    "application/vnd.oasis.opendocument.presentation",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",  # noqa
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",  # noqa
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",  # noqa
+]
+
+ARCHIVES = [
+    "application/zip",
+    "application/x-rar-compressed",
+    "application/x-tar",
+    "application/x-gzip",
+    "application/x-7z-compressed",
+]
+
+ASSETS = [
+    "text/css",
+    "application/javascript",
+    "application/json",
+    "image/x-icon",
+    "application/rss+xml",
+    "application/atom+xml",
+    "application/opensearchdescription+xml",
+]
+
+GROUPS = {
+    "web": WEB,
+    "images": IMAGES,
+    "media": MEDIA,
+    "documents": DOCUMENTS,
+    "archives": ARCHIVES,
+    "assets": ASSETS,
+    "json": [JSON],
+}
