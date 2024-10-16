@@ -10,6 +10,10 @@ RUN apt clean
 
 COPY requirements.txt /home/mitmproxy/requirements_anystore.txt
 RUN pip install --no-cache-dir -r /home/mitmproxy/requirements_anystore.txt
+
+# FIMXE
+RUN pip install --no-cache-dir fakeredis
+
 COPY anycache.py /home/mitmproxy/anycache.py
 
 ENV ANYSTORE_DEFAULT_TTL=86400
