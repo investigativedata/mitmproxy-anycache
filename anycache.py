@@ -16,12 +16,13 @@ from urllib.parse import urlparse
 from anystore.exceptions import DoesNotExist
 from anystore.store import BaseStore, get_store
 from anystore.util import make_data_checksum
-from pantomime import normalize_mimetype
-from pantomime.types import DEFAULT, JSON
+
 from mitmproxy import ctx
 from mitmproxy.addonmanager import Loader
 from mitmproxy.http import HTTPFlow
 from mitmproxy.io import FlowReader, FlowWriter
+from pantomime import normalize_mimetype
+from pantomime.types import DEFAULT, JSON
 
 
 log = logging.getLogger(__name__)
